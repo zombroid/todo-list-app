@@ -1,68 +1,115 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
-  StyleSheet,
+  View,
   Text,
   TextInput,
   Button,
-  View,
   FlatList,
+  TouchableOpacity,
 } from "react-native";
-import TaskItem from "../components/TaskItem"; // Import TaskItem component
+import { db } from "../firebase"; // Correct path to firebase.js
+import {
+  collection,
+  addDoc,
+  getDocs,
+  deleteDoc,
+  doc,
+} from "firebase/firestore";
 
-export default function HomeScreen() {
-  const [task, setTask] = useState(""); // State for new task
-  const [tasks, setTasks] = useState([]); // State for storing tasks
+const HomeScreen = () => {
+  const [task, setTask] = useState("");
+  const [tasks, setTasks] = useState([]);
 
-  // Function to add a new task
-  const addTask = () => {
-    if (task.trim() !== "") {
-      setTasks([...tasks, { id: Date.now().toString(), text: task }]);
-      setTask(""); // Clear input after adding task
+  // Fetch tasks from Firestore when the component mounts
+  useEffect(() => {
+    const fetchTasks = async () => {
+      const tasksCollection = collection(db, "tasks");
+      const tasksSnapshot = await getDocs(tasksCollection);
+      const tasksList = tasksSnapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+      }));
+      setTasks(tasksList);
+    };
+
+    fetchTasks();
+  }, []);
+
+  // Add a task to Firestore
+  const addTask = async () => {
+    if (task.trim()) {
+      try {
+        await addDoc(collection(db, "tasks"), {
+          text: task,
+        });
+        setTask(""); // Clear input field
+        // Re-fetch tasks after adding a new one
+        const tasksCollection = collection(db, "tasks");
+        const tasksSnapshot = await getDocs(tasksCollection);
+        const tasksList = tasksSnapshot.docs.map((doc) => ({
+          id: doc.id,
+          ...doc.data(),
+        }));
+        setTasks(tasksList);
+      } catch (error) {
+        console.error("Error adding task: ", error);
+      }
     }
   };
 
-  // Function to delete a task
-  const deleteTask = (id) => {
-    setTasks(tasks.filter((task) => task.id !== id));
+  // Delete a task from Firestore
+  const deleteTask = async (id) => {
+    try {
+      await deleteDoc(doc(db, "tasks", id));
+      // Re-fetch tasks after deleting
+      const tasksCollection = collection(db, "tasks");
+      const tasksSnapshot = await getDocs(tasksCollection);
+      const tasksList = tasksSnapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+      }));
+      setTasks(tasksList);
+    } catch (error) {
+      console.error("Error deleting task: ", error);
+    }
   };
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.header}>Todo List</Text>
+    <View style={{ flex: 1, padding: 20 }}>
       <TextInput
-        style={styles.input}
-        placeholder="Add a new task"
         value={task}
         onChangeText={setTask}
+        placeholder="Enter a task"
+        style={{
+          height: 40,
+          borderColor: "gray",
+          borderWidth: 1,
+          marginBottom: 20,
+          paddingLeft: 10,
+        }}
       />
       <Button title="Add Task" onPress={addTask} />
+
       <FlatList
         data={tasks}
-        keyExtractor={(item) => item.id}
         renderItem={({ item }) => (
-          <TaskItem task={item} onDelete={deleteTask} />
+          <View
+            style={{
+              flexDirection: "row",
+              justifyContent: "space-between",
+              marginVertical: 10,
+            }}
+          >
+            <Text>{item.text}</Text>
+            <TouchableOpacity onPress={() => deleteTask(item.id)}>
+              <Text style={{ color: "red" }}>Delete</Text>
+            </TouchableOpacity>
+          </View>
         )}
+        keyExtractor={(item) => item.id}
       />
     </View>
   );
-}
+};
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    padding: 20,
-    backgroundColor: "#fff",
-  },
-  header: {
-    fontSize: 24,
-    fontWeight: "bold",
-    marginBottom: 10,
-  },
-  input: {
-    borderWidth: 1,
-    borderColor: "#ccc",
-    padding: 10,
-    marginBottom: 10,
-    borderRadius: 5,
-  },
-});
+export default HomeScreen;
